@@ -1,0 +1,492 @@
+<!-- START SIGMA IMPORTS -->
+<script src="../src/sigma.core.js"></script>
+<script src="../src/conrad.js"></script>
+<script src="../src/utils/sigma.utils.js"></script>
+<script src="../src/utils/sigma.polyfills.js"></script>
+<script src="../src/sigma.settings.js"></script>
+<script src="../src/classes/sigma.classes.dispatcher.js"></script>
+<script src="../src/classes/sigma.classes.configurable.js"></script>
+<script src="../src/classes/sigma.classes.graph.js"></script>
+<script src="../src/classes/sigma.classes.camera.js"></script>
+<script src="../src/classes/sigma.classes.quad.js"></script>
+<script src="../src/classes/sigma.classes.edgequad.js"></script>
+<script src="../src/captors/sigma.captors.mouse.js"></script>
+<script src="../src/captors/sigma.captors.touch.js"></script>
+<script src="../src/renderers/sigma.renderers.canvas.js"></script>
+<script src="../src/renderers/sigma.renderers.webgl.js"></script>
+<script src="../src/renderers/sigma.renderers.svg.js"></script>
+<script src="../src/renderers/sigma.renderers.def.js"></script>
+<script src="../src/renderers/webgl/sigma.webgl.nodes.def.js"></script>
+<script src="../src/renderers/webgl/sigma.webgl.nodes.fast.js"></script>
+<script src="../src/renderers/webgl/sigma.webgl.edges.def.js"></script>
+<script src="../src/renderers/webgl/sigma.webgl.edges.fast.js"></script>
+<script src="../src/renderers/webgl/sigma.webgl.edges.arrow.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.labels.def.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.hovers.def.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.nodes.def.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edges.def.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edges.curve.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edges.arrow.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edges.curvedArrow.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edgehovers.def.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edgehovers.curve.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edgehovers.arrow.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.edgehovers.curvedArrow.js"></script>
+<script src="../src/renderers/canvas/sigma.canvas.extremities.def.js"></script>
+<script src="../src/renderers/svg/sigma.svg.utils.js"></script>
+<script src="../src/renderers/svg/sigma.svg.nodes.def.js"></script>
+<script src="../src/renderers/svg/sigma.svg.edges.def.js"></script>
+<script src="../src/renderers/svg/sigma.svg.edges.curve.js"></script>
+<script src="../src/renderers/svg/sigma.svg.labels.def.js"></script>
+<script src="../src/renderers/svg/sigma.svg.hovers.def.js"></script>
+<script src="../src/middlewares/sigma.middlewares.rescale.js"></script>
+<script src="../src/middlewares/sigma.middlewares.copy.js"></script>
+<script src="../src/misc/sigma.misc.animation.js"></script>
+<script src="../src/misc/sigma.misc.bindEvents.js"></script>
+<script src="../src/misc/sigma.misc.bindDOMEvents.js"></script>
+<script src="../src/misc/sigma.misc.drawHovers.js"></script>
+<!-- END SIGMA IMPORTS -->
+<div id="container">
+  <style>
+    #graph-container {
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      position: absolute;
+    }
+  </style>
+  <div id="graph-container"></div>
+</div>
+<script>
+
+/**
+ * This is a basic example on how to develop a custom node renderer. In
+ * this example, the renderer will display an image clipped in a disc,
+ * with a border colored according the node's "color" value.
+ *
+ * If a node as the value "image" to its attribute "type", then it will
+ * displayed with the node renderer "sigma.canvas.nodes.image", with the
+ * url being its "url" value.
+ *
+ * IMPORTANT: This node renderer just works with the canvas renderer. If
+ * you do want to display images with the WebGL renderer, you will have
+ * to develop a specific WebGL node renderer.
+ */
+sigma.utils.pkg('sigma.canvas.nodes');
+sigma.canvas.nodes.image = (function() {
+  var _cache = {},
+      _loading = {},
+      _callbacks = {};
+
+  // Return the renderer itself:
+  var renderer = function(node, context, settings) {
+    var args = arguments,
+        prefix = settings('prefix') || '',
+        size = node[prefix + 'size'],
+        color = node.color || settings('defaultNodeColor'),
+        url = node.url;
+
+    if (_cache[url]) {
+      context.save();
+
+      // Draw the clipping disc:
+      context.beginPath();
+      context.arc(
+        node[prefix + 'x'],
+        node[prefix + 'y'],
+        node[prefix + 'size'],
+        0,
+        Math.PI * 2,
+        true
+      );
+      context.closePath();
+      context.clip();
+
+      // Draw the image
+      context.drawImage(
+        _cache[url],
+        node[prefix + 'x'] - size,
+        node[prefix + 'y'] - size,
+        2 * size,
+        2 * size
+      );
+
+      // Quit the "clipping mode":
+      context.restore();
+
+      // Draw the border:
+      context.beginPath();
+      context.arc(
+        node[prefix + 'x'],
+        node[prefix + 'y'],
+        node[prefix + 'size'],
+        0,
+        Math.PI * 2,
+        true
+      );
+      context.lineWidth = size / 5;
+      context.strokeStyle = node.color || settings('defaultNodeColor');
+      context.stroke();
+    } else {
+      sigma.canvas.nodes.image.cache(url);
+      sigma.canvas.nodes.def.apply(
+        sigma.canvas.nodes,
+        args
+      );
+    }
+  };
+
+  // Let's add a public method to cache images, to make it possible to
+  // preload images before the initial rendering:
+  renderer.cache = function(url, callback) {
+    if (callback)
+      _callbacks[url] = callback;
+
+    if (_loading[url])
+      return;
+
+    var img = new Image();
+
+    img.onload = function() {
+      _loading[url] = false;
+      _cache[url] = img;
+
+      if (_callbacks[url]) {
+        _callbacks[url].call(this, img);
+        delete _callbacks[url];
+      }
+    };
+
+    _loading[url] = true;
+    img.src = url;
+  };
+
+  return renderer;
+})();
+
+sigma.utils.pkg('sigma.webgl.nodes');
+sigma.webgl.nodes.image = {
+  POINTS: 3,
+  ATTRIBUTES: 6,
+  addNode: function(node, data, i, prefix, settings) {
+    var color = sigma.utils.floatColor(
+      node.color || settings('defaultNodeColor')
+    );
+
+    var borderColor = sigma.utils.floatColor(
+      node.borderColor || settings('defaultNodeBorderColor') || '#444'
+    );
+    var borderSize = node.borderSize || settings('defaultNodeBorderSize') || 1;
+
+    data[i++] = node[prefix + 'x'];
+    data[i++] = node[prefix + 'y'];
+    data[i++] = node[prefix + 'size'];
+    data[i++] = color;
+    data[i++] = borderSize;
+    data[i++] = borderColor;
+    
+  },
+  render: function(gl, program, data, params) {
+    var buffer;
+
+    // Define attributes:
+    var positionLocation =
+          gl.getAttribLocation(program, 'a_position'),
+        sizeLocation =
+          gl.getAttribLocation(program, 'a_size'),
+        colorLocation =
+          gl.getAttribLocation(program, 'a_color'),
+        borderSizeLocation =
+          gl.getAttribLocation(program, 'a_border_size'),
+        borderColorLocation =
+          gl.getAttribLocation(program, 'a_border_color'),
+        resolutionLocation =
+          gl.getUniformLocation(program, 'u_resolution'),
+        matrixLocation =
+          gl.getUniformLocation(program, 'u_matrix'),
+        ratioLocation =
+          gl.getUniformLocation(program, 'u_ratio'),
+        scaleLocation =
+          gl.getUniformLocation(program, 'u_scale');
+
+    buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+
+    gl.uniform2f(resolutionLocation, params.width, params.height);
+    gl.uniform1f(
+      ratioLocation,
+      1 / Math.pow(params.ratio, params.settings('nodesPowRatio'))
+    );
+    gl.uniform1f(scaleLocation, params.scalingRatio);
+    gl.uniformMatrix3fv(matrixLocation, false, params.matrix);
+
+    gl.enableVertexAttribArray(positionLocation);
+    gl.enableVertexAttribArray(sizeLocation);
+    gl.enableVertexAttribArray(colorLocation);
+    gl.enableVertexAttribArray(borderSizeLocation);
+    gl.enableVertexAttribArray(borderColorLocation);
+
+    gl.vertexAttribPointer(
+      positionLocation,
+      2,
+      gl.FLOAT,
+      false,
+      this.ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+      0
+    );
+    gl.vertexAttribPointer(
+      sizeLocation,
+      1,
+      gl.FLOAT,
+      false,
+      this.ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+      2 * Float32Array.BYTES_PER_ELEMENT
+    );
+    gl.vertexAttribPointer(
+      colorLocation,
+      1,
+      gl.FLOAT,
+      false,
+      this.ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+      3 * Float32Array.BYTES_PER_ELEMENT
+    );
+    gl.vertexAttribPointer(
+      borderSizeLocation,
+      1,
+      gl.FLOAT,
+      false,
+      this.ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+      4 * Float32Array.BYTES_PER_ELEMENT
+    );
+    gl.vertexAttribPointer(
+      borderColorLocation,
+      1,
+      gl.FLOAT,
+      false,
+      this.ATTRIBUTES * Float32Array.BYTES_PER_ELEMENT,
+      5 * Float32Array.BYTES_PER_ELEMENT
+    );
+
+    gl.drawArrays(
+      gl.POINTS,
+      params.start || 0,
+      params.count || (data.length / this.ATTRIBUTES)
+    );
+  },
+  initProgram: function(gl) {
+    var vertexShader,
+        fragmentShader,
+        program;
+
+    vertexShader = sigma.utils.loadShader(
+      gl,
+      [
+        'attribute vec2 a_position;',
+        'attribute float a_size;',
+        'attribute float a_color;',
+        'attribute float a_border_size;',
+        'attribute float a_border_color;',
+          
+        'uniform vec2 u_resolution;',
+        'uniform float u_ratio;',
+        'uniform float u_scale;',
+        'uniform mat3 u_matrix;',
+
+        'varying vec4 color;',
+        'varying vec4 border_color;',
+        'varying vec2 center;',
+        'varying float radius;',
+        'varying float border_radius;',
+
+        // new vars
+        'varying float varR1;',
+        'varying float varR2;',
+        'varying float varR3;',
+        'varying float varR4;',
+        'const float fading = 0.5;',
+
+        'void main() {',
+          
+          // Multiply the point size twice:
+          'radius = a_size * u_ratio;',
+          'border_radius = a_border_size * u_ratio;',
+          
+          'float r4 = 1.0;',
+          'float r3 = 1.0 - fading / radius;',
+          'float r2 = 1.0 - border_radius / radius;',
+          'float r1 = r2 - fading / radius;',
+            
+          'varR4 = r4 * r4 * 0.25;',
+          'varR3 = r3 * r3 * 0.25;',
+          'varR2 = r2 * r2 * 0.25;',
+          'varR1 = r1 * r1 * 0.25;',
+
+          // Scale from [[-1 1] [-1 1]] to the container:
+          'vec2 position = (u_matrix * vec3(a_position, 1)).xy;',
+          
+          'center = position * u_scale;',
+          'center = vec2(center.x, u_scale * u_resolution.y - center.y);',
+
+          'position = position +',
+            '2.0 * radius * vec2(0, 0);',
+          'position = (position / u_resolution * 2.0 - 1.0) * vec2(1, -1);',
+
+          'radius = radius * u_scale;',
+          'border_radius = border_radius * u_scale;',
+          
+          'gl_PointSize = 2.0 * radius;',
+          'gl_Position = vec4(position.xy, 0.0, 1.0);',
+
+          // Extract the color:
+          'float c = a_color;',
+          'color.b = mod(c, 256.0); c = floor(c / 256.0);',
+          'color.g = mod(c, 256.0); c = floor(c / 256.0);',
+          'color.r = mod(c, 256.0); c = floor(c / 256.0); color /= 255.0;',
+          'color.a = 1.0;',
+          
+          // Extract the border color:
+          'float bc = a_border_color;',
+          'border_color.b = mod(bc, 256.0); bc = floor(bc / 256.0);',
+          'border_color.g = mod(bc, 256.0); bc = floor(bc / 256.0);',
+          'border_color.r = mod(bc, 256.0); bc = floor(bc / 256.0); border_color /= 255.0;',
+          'border_color.a = 1.0;',
+        '}'
+      ].join('\n'),
+      gl.VERTEX_SHADER
+    );
+
+    fragmentShader = sigma.utils.loadShader(
+      gl,
+      [
+        'precision mediump float;',
+
+        'varying vec4 color;',
+        'varying vec4 border_color;',
+        'varying vec2 center;',
+        'varying float radius;',
+
+        'varying float varR1;',
+        'varying float varR2;',
+        'varying float varR3;',
+        'varying float varR4;',
+
+        'const vec4 TRANSPARENT = vec4(1, 1, 1, 0);',
+
+        'void main(void) {',
+
+          'float dist = distance( gl_PointCoord, vec2(0.5) );',
+          
+          'float x = gl_PointCoord.x - 0.5;',
+          'float y = gl_PointCoord.y - 0.5;',
+          'float radius = x * x + y * y;',
+        
+          // Here is how we draw a disc instead of a square:
+        
+          // discard points beyond the radius to avoid a rectangle
+          // 'if( radius > 1.0 ) discard;',
+
+          // antialias border
+          'float alpha = 1.0 - smoothstep(0.45, 0.5, dist);',
+
+          'vec4 applied_color;',
+          
+          'if( radius < varR1 )',
+            'applied_color = color;',
+          'else if( radius < varR2 )',
+            'applied_color = mix(color, border_color, (radius - varR1) / (varR2 - varR1));',
+          'else if( radius < varR3 )',
+            'applied_color = border_color;',
+          'else',
+            'applied_color = mix(border_color, TRANSPARENT, (radius - varR3) / (varR4 - varR3));',
+          
+          'gl_FragColor = vec4(applied_color.rgb, alpha);',
+          
+        '}'
+      ].join('\n'),
+      gl.FRAGMENT_SHADER
+    );
+
+    program = sigma.utils.loadProgram(gl, [vertexShader, fragmentShader]);
+
+    return program;
+  }
+};
+
+// Now that's the renderer has been implemented, let's generate a graph
+// to render:
+var i,
+    s,
+    img,
+    N = 5,
+    E = 5,
+    g = {
+      nodes: [],
+      edges: []
+    },
+    urls = [
+      'img/img1.png',
+      'img/img2.png',
+      'img/img3.png',
+      'img/img4.png'
+    ],
+    loaded = 0,
+    colors = [
+      '#617db4',
+      '#668f3c',
+      '#c6583e',
+      '#b956af'
+    ];
+
+// Generate a random graph, with ~30% nodes having the type "image":
+for (i = 0; i < N; i++) {
+  img = i < N/2;
+  var color = colors[Math.floor(Math.random() * colors.length)];
+  g.nodes.push({
+    id: 'n' + i,
+    label: 'Node ' + i,
+    type: img ? 'image' : 'image',
+    url: img ? urls[Math.floor(Math.random() * urls.length)] : null,
+    x: Math.random(),
+    y: Math.random(),
+    size: Math.random(),
+    color: color,
+    borderColor: "#444",
+    borderSize: 2
+  });
+}
+
+for (i = 0; i < E; i++)
+  g.edges.push({
+    id: 'e' + i,
+    source: 'n' + (Math.random() * N | 0),
+    target: 'n' + (Math.random() * N | 0),
+    size: Math.random()
+  });
+
+// Then, wait for all images to be loaded before instanciating sigma:
+urls.forEach(function(url) {
+  sigma.canvas.nodes.image.cache(
+    url,
+    function() {
+      if (++loaded === urls.length)
+        // Instantiate sigma:
+        s = new sigma({
+          graph: g,
+          renderer: {
+            // IMPORTANT:
+            // "image" currently only works with the canvas renderer.
+            // Replace with "canvas" to test how it works.
+            container: document.getElementById('graph-container'),
+            type: 'webgl' // 'canvas'
+          },
+          settings: {
+            minNodeSize: 8,
+            maxNodeSize: 16,
+          }
+        });
+    }
+  );
+});
+</script>

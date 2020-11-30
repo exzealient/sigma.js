@@ -169,8 +169,8 @@ sigma.canvas.nodes.image = (function() {
 var i,
     s,
     img,
-    N = 100,
-    E = 500,
+    N = 5,
+    E = 5,
     g = {
       nodes: [],
       edges: []
@@ -191,7 +191,7 @@ var i,
 
 // Generate a random graph, with ~30% nodes having the type "image":
 for (i = 0; i < N; i++) {
-  img = Math.random() >= 0.7;
+  img = i < N/2;
   g.nodes.push({
     id: 'n' + i,
     label: 'Node ' + i,
