@@ -212,6 +212,7 @@
 
     // Push nodes:
     for (k in this.nodeFloatArrays) {
+        if (k != "image"){
       renderer = sigma.webgl.nodes[k];
       a = this.nodeFloatArrays[k].nodes;
 
@@ -238,6 +239,7 @@
             this.settings
           );
       }
+        }
     }
 
     return this;
@@ -434,6 +436,7 @@
         // Render
         if (this.nodeFloatArrays[k]) {
           nodesGl.useProgram(this.nodePrograms[k]);
+          if (k != "image"){
           renderer.render(
             nodesGl,
             this.nodePrograms[k],
@@ -447,6 +450,24 @@
               scalingRatio: this.settings(options, 'webglOversamplingRatio')
             }
           );
+          }
+          else
+          {
+          renderer.render(
+            nodesGl,
+            this.nodePrograms[k],
+            this.nodeFloatArrays[k].nodes,
+            options.prefix,
+            {
+              settings: this.settings,
+              matrix: matrix,
+              width: this.width,
+              height: this.height,
+              ratio: this.camera.ratio,
+              scalingRatio: this.settings(options, 'webglOversamplingRatio')
+            }
+          );
+          }
         }
       }
     }

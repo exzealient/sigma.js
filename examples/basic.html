@@ -17,6 +17,7 @@
 <script src="../src/renderers/sigma.renderers.svg.js"></script>
 <script src="../src/renderers/sigma.renderers.def.js"></script>
 <script src="../src/renderers/webgl/sigma.webgl.nodes.def.js"></script>
+<script src="../src/renderers/webgl/sigma.webgl.nodes.image.js"></script>
 <script src="../src/renderers/webgl/sigma.webgl.nodes.fast.js"></script>
 <script src="../src/renderers/webgl/sigma.webgl.edges.def.js"></script>
 <script src="../src/renderers/webgl/sigma.webgl.edges.fast.js"></script>
@@ -69,23 +70,28 @@
  */
 var i,
     s,
-    N = 100,
-    E = 500,
+    N = 10,
+    E = 20,
     g = {
       nodes: [],
       edges: []
     };
 
+image = new Image();
 // Generate a random graph:
 for (i = 0; i < N; i++)
+{
+    img = Math.random() < 0.5;
   g.nodes.push({
     id: 'n' + i,
     label: 'Node ' + i,
     x: Math.random(),
     y: Math.random(),
     size: Math.random(),
-    color: '#666'
-  });
+    color: '#666',
+    type: img ? 'image' : 'fast',
+    url: "img/img2.png"
+  });}
 
 for (i = 0; i < E; i++)
   g.edges.push({
@@ -97,8 +103,10 @@ for (i = 0; i < E; i++)
   });
 
 // Instantiate sigma:
-s = new sigma({
-  graph: g,
-  container: 'graph-container'
-});
+image.onload = function(){
+    s = new sigma({
+    graph: g,
+    container: 'graph-container',
+});};
+image.src = "img/img2.png"
 </script>
